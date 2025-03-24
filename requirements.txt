@@ -1,0 +1,29 @@
+# installs for running the engine
+fastapi~=0.114.0
+gym~=0.26.0
+numpy~=1.26.0
+pandas~=2.2.0
+pydantic~=2.9.0
+requests~=2.32.0
+treys~=0.1.0
+uvicorn~=0.30.0
+
+# installs for running pytest coverage
+pytest==8.3.3
+pytest-cov==6.0.0
+pytest-cover==3.0.0
+pytest-coverage==0.0
+pytest-asyncio==0.25.3
+
+# Optional Additional Libraries
+# These are installed on the server for you to use, but optional to run locally.
+# Feel free to uncomment them if you want to use them locally.
+# Make sure you have the correct version installed, or it may break things.
+# torch~=2.2.0
+# joblib~=1.4.0
+# keras~=3.7.0
+# scikit-learn~=1.5.0
+# scipy~=1.14.0
+# tensorflow~=2.16.0
+# tqdm~=4.67.0
+# stable-baselines3~=2.4.0
