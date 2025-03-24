@@ -1,0 +1,5 @@
+pokerenv/
+.vscode/
+__pycache__/
+agent_logs/
+match.csv

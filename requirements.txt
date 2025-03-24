@@ -21,9 +21,9 @@ pytest-asyncio==0.25.3
 # Make sure you have the correct version installed, or it may break things.
 # torch~=2.2.0
 # joblib~=1.4.0
-# keras~=3.7.0
-# scikit-learn~=1.5.0
+keras~=3.7.0
+scikit-learn~=1.5.0
 # scipy~=1.14.0
-# tensorflow~=2.16.0
-# tqdm~=4.67.0
+tensorflow~=2.16.0
+tqdm~=4.67.0
 # stable-baselines3~=2.4.0
