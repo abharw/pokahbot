@@ -1,7 +1,7 @@
 import random
 from agents.agent import Agent
 from gym_env import PokerEnv
-from .hand_evaluator import HandEvaluator
+from submission.hand_evaluator import HandEvaluator
 
 action_types = PokerEnv.ActionType
 int_to_card = PokerEnv.int_to_card
