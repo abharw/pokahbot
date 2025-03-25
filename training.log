@@ -1,0 +1,56 @@
+2025-03-24 22:31:48,963 - PokerTrainer - INFO - Building training model
+2025-03-24 22:31:49,000 - PlayerAgent - INFO - No pre-trained model found, using rule-based strategy
+2025-03-24 22:31:49,001 - PokerTrainer - INFO - Using agent's built-in model
+2025-03-24 22:31:49,002 - PokerTrainer - INFO - Reward type: <class 'tuple'>, Value: (-1, 1)
+2025-03-24 22:31:49,002 - PokerTrainer - INFO - Training against rule-based opponent for 2500 episodes
+2025-03-24 22:31:56,529 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:32:04,397 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:32:08,348 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5
+2025-03-24 22:32:08,348 - PokerTrainer - INFO - Training complete. Final win rate: 0.000
+2025-03-24 22:32:08,348 - PokerTrainer - INFO - Training with domain knowledge for 1000 episodes
+2025-03-24 22:32:09,065 - gym_env - ERROR - Player 0 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:33:00,334 - PokerTrainer - INFO - Building training model
+2025-03-24 22:33:00,375 - PlayerAgent - INFO - No pre-trained model found, using rule-based strategy
+2025-03-24 22:33:00,375 - PokerTrainer - INFO - Using agent's built-in model
+2025-03-24 22:33:00,376 - PokerTrainer - INFO - Reward type: <class 'tuple'>, Value: (-1, 1)
+2025-03-24 22:33:00,376 - PokerTrainer - INFO - Training against rule-based opponent for 2500 episodes
+2025-03-24 22:33:08,003 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:33:15,891 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:33:19,836 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5
+2025-03-24 22:33:19,837 - PokerTrainer - INFO - Training complete. Final win rate: 0.000
+2025-03-24 22:33:19,837 - PokerTrainer - INFO - Training with domain knowledge for 1000 episodes
+2025-03-24 22:33:20,675 - gym_env - ERROR - Player 0 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:33:21,977 - gym_env - ERROR - Player 0 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:33:23,873 - gym_env - ERROR - Player 1 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:33:27,584 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5
+2025-03-24 22:33:27,584 - PokerTrainer - INFO - Domain knowledge training complete. Final win rate: 0.001
+2025-03-24 22:33:27,584 - PokerTrainer - INFO - Training using self-play for 1500 episodes
+2025-03-24 22:33:35,689 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:33:39,705 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5
+2025-03-24 22:33:39,705 - PokerTrainer - INFO - Self-play training complete. Final win rate: 0.000
+2025-03-24 22:33:39,707 - PokerTrainer - INFO - Saved model to /Users/aravbhardwaj/Desktop/aipoker/model_weights.weights.h5
+2025-03-24 22:33:39,707 - PokerTrainer - INFO - Training complete!
+2025-03-24 22:37:03,801 - PokerTrainer - INFO - Building training model
+2025-03-24 22:37:03,843 - PlayerAgent - INFO - No pre-trained model found, using rule-based strategy
+2025-03-24 22:37:03,843 - PokerTrainer - INFO - Using agent's built-in model
+2025-03-24 22:37:03,844 - PokerTrainer - INFO - Reward type: <class 'tuple'>, Value: (-1, 1)
+2025-03-24 22:37:03,844 - PokerTrainer - INFO - Training against rule-based opponent for 5000 episodes
+2025-03-24 22:37:36,222 - PokerTrainer - INFO - Building training model
+2025-03-24 22:37:36,238 - PlayerAgent - INFO - No pre-trained model found, using rule-based strategy
+2025-03-24 22:37:36,238 - PokerTrainer - INFO - Using agent's built-in model
+2025-03-24 22:37:36,240 - PokerTrainer - INFO - Reward type: <class 'tuple'>, Value: (-1, 1)
+2025-03-24 22:37:36,240 - PokerTrainer - INFO - Training against rule-based opponent for 5000 episodes
+2025-03-24 22:37:43,784 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:37:51,618 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:37:59,575 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:38:07,461 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:38:15,353 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5.tmp.weights.h5
+2025-03-24 22:38:15,357 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5
+2025-03-24 22:38:15,357 - PokerTrainer - INFO - Training complete. Final win rate: 0.000
+2025-03-24 22:38:15,357 - PokerTrainer - INFO - Training with domain knowledge for 2000 episodes
+2025-03-24 22:38:16,107 - gym_env - ERROR - Player 1 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:38:21,766 - gym_env - ERROR - Player 1 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:38:25,923 - gym_env - ERROR - Player 1 attempted invalid raise amount: 1. Must be between 2 and 1
+2025-03-24 22:38:30,860 - PokerTrainer - INFO - Saved model to ./model_weights.weights.h5
+2025-03-24 22:38:30,860 - PokerTrainer - INFO - Domain knowledge training complete. Final win rate: 0.001
+2025-03-24 22:38:30,860 - PokerTrainer - INFO - Training using self-play for 3000 episodes

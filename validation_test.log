@@ -1,0 +1,4 @@
+2025-03-24 22:36:34,061 - validation_test - INFO - Starting validation test for invalid raise handling
+2025-03-24 22:36:34,063 - validation_test - INFO - Testing with observation: {'street': 0, 'acting_agent': 0, 'my_cards': [10, 15], 'community_cards': [-1, -1, -1, -1, -1], 'my_bet': 1, 'opp_bet': 2, 'opp_discarded_card': -1, 'opp_drawn_card': -1, 'min_raise': 2, 'max_raise': 1, 'valid_actions': [True, True, False, True, True]}
+2025-03-24 22:36:34,063 - PlayerAgent - INFO - Preventing RAISE: min_raise=2, max_raise=1
+2025-03-24 22:36:34,063 - validation_test - INFO - SUCCESS: Agent chose non-RAISE action (4) with raise_amount=0
