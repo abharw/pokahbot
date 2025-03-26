@@ -127,7 +127,6 @@ class PlayerAgent(Agent):
         """Reset the bot state for a new hand"""
         self.has_discarded = False
 
-
 def get_agent():
     """Required function to create agent instance"""
     return PlayerAgent()
