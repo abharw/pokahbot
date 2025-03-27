@@ -17,9 +17,13 @@ class PlayerAgent(Agent):
         
         # Initialize hand evaluator
         self.evaluator = HandEvaluator()
-        
+
         # Game state tracking
         self.hand_history = []
+        self.opp_action_count = 0
+        self.our_action_count = 0
+        self.allan_threshold = 0.7
+        self.min_actions_for_pattern = 3
     
     def is_premium_hand(self, cards):
         # Extract ranks
@@ -106,8 +110,8 @@ class PlayerAgent(Agent):
                 return False, -1
         
         if(self.evaluator.get_rank(hand[0]) > self.evaluator.get_rank(hand[1])):
-            return True, hand[1]
-        return True, hand[0]
+            return True, 1
+        return True, 0
 
     def calculate_optimal_bet(self, strength, pot_size, max_raise, min_raise):
         # Scale bet size based on hand strength
@@ -140,7 +144,7 @@ class PlayerAgent(Agent):
         if opp_bet > 10: return .45
         return 0
     
-    def opp_estimate_post_flop(self, opp_bet):
+    def opp_estimate_postflop(self, opp_bet):
         if opp_bet > 50: return .7
         if opp_bet > 40: return .6
         if opp_bet > 30: return .5
@@ -185,12 +189,26 @@ class PlayerAgent(Agent):
             opp_strength = self.bet_ratio_preflop(self.opp_estimate_preflop(opp_bet))
             our_strength = self.bet_ratio_preflop(hand_strength)
             # calling ALL IN 
-            if opp_bet == max_raise and is_premium:
-                if valid_actions[action_types.CALL.value]:
-                    return action_types.CALL.value, 0, -1 
+            if opp_bet == max_raise:
+                if is_premium:
+                    if valid_actions[action_types.CALL.value]:
+                        return action_types.CALL.value, 0, -1
+                
+                # For non-premium hands, use the dynamic threshold based on opponent patterns
+                allin_frequency = self.opp_allin_count / max(self.opp_action_count, 1)
+                
+                # If we have enough data and opponent goes all-in frequently
+                if self.opp_action_count >= self.min_actions_for_pattern and allin_frequency > 0.4:
+                    # Adjust calling threshold based on all-in frequency
+                    adjusted_threshold = max(0.4, 0.8 - allin_frequency * 0.5)
+                    
+                    # Call with strong non-premium hands against frequent all-in player
+                    if hand_strength > adjusted_threshold:
+                        if valid_actions[action_types.CALL.value]:
+                            return action_types.CALL.value, 0, -1
             # everything else
             if our_strength > opp_strength:
-                tentative_raise = our_strength * max_raise * .8
+                tentative_raise = int(our_strength * max_raise * .8)
                 if min_raise < tentative_raise and tentative_raise < max_raise:
                     if valid_actions[action_types.RAISE.value]:
                         return action_types.RAISE.value, tentative_raise, -1
@@ -228,15 +246,15 @@ class PlayerAgent(Agent):
                     return action_types.FOLD.value, 0, -1  
 
         else: #POST FLOP
-            opp_strength = self.bet_ratio_postflop(self.opp_estimate_postflop(opp_bet))
-            our_strength = self.bet_ratio_postflop(hand_strength)
+            opp_strength = self.bet_ratio_postflop(self.opp_estimate_postflop(opp_bet), community_cards)
+            our_strength = self.bet_ratio_postflop(hand_strength, community_cards)
 
             if opp_bet == max_raise and our_strength > opp_strength:
                 if valid_actions[action_types.CALL.value]:
                     return action_types.CALL.value, 0, -1 
             # everything else
             if our_strength > opp_strength:
-                tentative_raise = our_strength * max_raise * .8
+                tentative_raise = int(our_strength * max_raise * .8)
                 if min_raise < tentative_raise and tentative_raise < max_raise:
                     if valid_actions[action_types.RAISE.value]:
                         return action_types.RAISE.value, tentative_raise, -1
@@ -278,9 +296,7 @@ class PlayerAgent(Agent):
             return action_types.CHECK.value, 0, -1
         else:
             return action_types.FOLD.value, 0, -1  
-
                     
-    
     def observe(self, observation, reward, terminated, truncated, info):
         """Track game outcomes to adjust strategy"""
         if terminated and abs(reward) > 20:  # Only log significant hand results
@@ -295,7 +311,28 @@ class PlayerAgent(Agent):
             # Keep history manageable
             if len(self.hand_history) > 50:
                 self.hand_history.pop(0)
-    
+
+        if "opp_action" in observation and observation["opp_action"] is not None:
+            self.opp_action_count += 1
+        
+        # Check if opponent went all-in
+        if (observation["opp_action"] == action_types.RAISE.value and 
+            observation["opp_bet"] == observation["max_raise"]):
+            self.opp_allin_count += 1
+            
+        # Update the all-in frequency threshold dynamically
+        if self.opp_action_count >= 10:  # Need some minimum sample
+            allin_frequency = self.opp_allin_count / self.opp_action_count
+            
+            # If opponent goes all-in often, loosen our calling standards
+            if allin_frequency > 0.6:  # They go all-in more than 60% of the time
+                self.allin_threshold = 0.4  # Lower threshold means we call more often
+            elif allin_frequency > 0.3:  # They go all-in sometimes
+                self.allin_threshold = 0.55
+            else:  # They rarely go all-in
+                self.allin_threshold = 0.7
+
+
     def reset(self):
         """Reset the bot state for a new hand"""
         self.has_discarded = False

@@ -103,10 +103,7 @@ class HandEvaluator:
         return 0.20 + 0.10 * is_suited
     
     def get_strength_postflop(self, player_cards, community_cards):
-        # If no community cards yet, use basic hand strength
-        if not community_cards:
-            return (self.get_hand_strength(player_cards), self.HAND_RANKINGS["HIGH_CARD"])
-        
+    
         # Extract ranks and suits
         player_ranks = [self.get_rank(card) for card in player_cards]
         player_suits = [self.get_suit(card) for card in player_cards]
@@ -499,16 +496,44 @@ class HandEvaluator:
         high_card = max(ranks)
         rank_str = "A" if high_card == 8 else str(high_card + 2)
         return f"High Card, {rank_str}"
-
+    
     def bet_size_helper(self, community_cards):
-        result = self.best_and_worst_hands(community_cards)['best_hand']['hole_cards']
-
-        best_playercards_int = [self.card_notation_to_int(x) for x in result]
-        community_ints = [self.card_notation_to_int(card) for card in community_cards]
+        """
+        Calculate the strength of the best possible hand with given community cards.
         
-        best_strength = self.get_strength_postflop(best_playercards_int, community_ints)[0]
-        # our_strength = self.get_strength_postflop(player_cards, community_ints)[0]
-        return best_strength
+        Args:
+            community_cards: List of integer card values
+            
+        Returns:
+            float: Strength value of best possible hand
+        """
+        # Fixed: Check if community cards is empty to avoid errors
+        if not community_cards:
+            return 0.5  # Return a medium strength if no community cards
+            
+        # Generate all possible remaining cards
+        all_cards = []
+        for rank_idx in range(9):  # 0-8 for ranks 2-A
+            for suit_idx in range(3):  # 0-2 for suits d, h, s
+                card_int = suit_idx * 9 + rank_idx
+                if card_int not in community_cards:
+                    all_cards.append(card_int)
+        
+        best_hand_strength = -1
+        
+        # Test all possible 2-card combinations as hole cards
+        for i in range(len(all_cards)):
+            for j in range(i + 1, len(all_cards)):
+                hole_cards = [all_cards[i], all_cards[j]]
+                
+                # Calculate hand strength and ranking
+                strength, _ = self.get_strength_postflop(hole_cards, community_cards)
+                
+                # Check if this is the best hand so far
+                if strength > best_hand_strength:
+                    best_hand_strength = strength
+        
+        return best_hand_strength
     
 # Example usage:
 # def test_best_worst_hands():
