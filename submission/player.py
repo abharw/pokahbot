@@ -21,162 +21,194 @@ class PlayerAgent(Agent):
         # Game state tracking
         self.hand_history = []
         
-        # Pattern recognition variables
-        self.previous_opp_bet = 0
+        # Opponent modeling
         self.hand_count = 0
-        self.big_bet_count = 0
         self.all_in_count = 0
-        self.allin_threshold = 0.7  # Will be adjusted based on observed patterns
-        self.min_hands_for_pattern = 3  # Minimum hands before adjusting strategy
+        self.previous_opp_bet = 0
+        self.min_hands_for_pattern = 2
+        
+        # Bet history tracking
+        self.our_bets = []
+        self.opp_bets = []
+        self.max_history_size = 20
     
     def is_premium_hand(self, cards):
-        # Extract ranks
+        """Identify premium hands that should always call an all-in"""
         ranks = sorted([self.evaluator.get_rank(card) for card in cards])
+        suits = [self.evaluator.get_suit(card) for card in cards]
+        is_suited = suits[0] == suits[1]
         
-        # Check for pocket pairs
-        if ranks[0] == ranks[1]:
-            # Pairs of 7s or better
-            return ranks[0] >= 5
+        # Pairs 4s or better (44+)
+        if ranks[0] == ranks[1] and ranks[0] >= 2:
+            return True
         
-        # Check for A9+
-        if 8 in ranks and min(ranks) >= 7:  # At least A9
-            # Check if suited
-            suits = [self.evaluator.get_suit(card) for card in cards]
-            if suits[0] == suits[1]:  # Suited
-                return True
-                
-        # Check for A7+ suited
-        if 8 in ranks and min(ranks) >= 5:  # At least A7
-            suits = [self.evaluator.get_suit(card) for card in cards]
-            if suits[0] == suits[1]:  # Suited
-                return True
+        # Any suited Ace
+        if 8 in ranks and is_suited:
+            return True
         
+        # Any A9 or better (A9+)
+        if 8 in ranks and min(ranks) >= 7:
+            return True
+        
+        # Connected high cards that are suited (89s+)
+        if min(ranks) >= 6 and abs(ranks[0] - ranks[1]) == 1 and is_suited:
+            return True
+            
         return False
     
     def should_redraw_preflop(self, cards):
-        # Don't redraw if we already have a premium hand
+        """Decide whether to redraw a card preflop"""
+        # Don't redraw premium hands or pairs
         if self.is_premium_hand(cards):
-            return False, -1  # Don't redraw
+            return False, -1
         
-        # Extract ranks
         ranks = [self.evaluator.get_rank(card) for card in cards]
         
-        # Check for pairs (don't break up pairs)
+        # Don't break up any pairs
         if ranks[0] == ranks[1]:
-            return False, -1  # Don't redraw
+            return False, -1
         
         # If we have an ace, keep it and redraw the other card
         if 8 in ranks:
-            return True, 0 if ranks[0] != 8 else 1  # Redraw non-ace
+            return True, 0 if ranks[0] != 8 else 1
             
-        # Redraw lower card
+        # Redraw the lower card
         return True, 0 if ranks[0] < ranks[1] else 1
     
     def should_redraw_postflop(self, hand, community_cards, street):
+        """Decide whether to redraw a card postflop"""
+        # Don't redraw if we already have a pair
         if self.evaluator.has_pair(hand):
             return False, -1
         
-        # First check for superior hands
-        all_cards = hand + community_cards
-
+        # Don't redraw strong hands
         if self.evaluator.get_strength_postflop(hand, community_cards)[1] > 3:
             return False, -1
+        
+        all_cards = hand + community_cards
         
         # Check for pair with community cards
         for i in range(len(hand)):
             for j in range(len(community_cards)):
                 if self.evaluator.has_pair([hand[i], community_cards[j]]):
-                    if i == 0:
-                        return True, 1
-                    return True, 0
-                
+                    # Discard the card that doesn't make the pair
+                    return True, 1 - i
+        
         # Check if close to a flush
         suits = [self.evaluator.get_suit(card) for card in all_cards]
         suit_counts = {}
-            
         for suit in suits:
-            if suit in suit_counts:                
-                suit_counts[suit] += 1
-            else:
-                suit_counts[suit] = 1
+            suit_counts[suit] = suit_counts.get(suit, 0) + 1
             
         for suit, count in suit_counts.items():
             if count == 4 and street < 3:
+                # Try to complete flush by keeping the card with matching suit
                 if self.evaluator.get_suit(hand[0]) == suit:
-                    if self.evaluator.get_suit(hand[1]) != suit:
-                        return True, 1
+                    return True, 1 if self.evaluator.get_suit(hand[1]) != suit else -1
                 else:
-                    if self.evaluator.get_suit(hand[1]) == suit:
-                        return True, 0
-                return False, -1
+                    return True, 0 if self.evaluator.get_suit(hand[1]) == suit else -1
         
-        # Return the index of the card with lower rank
+        # Default: discard the lower ranked card
         if self.evaluator.get_rank(hand[0]) > self.evaluator.get_rank(hand[1]):
-            return True, 1  # Discard the second card (index 1)
-        return True, 0  # Discard the first card (index 0)
-
-    def calculate_optimal_bet(self, strength, pot_size, max_raise, min_raise):
-        # Scale bet size based on hand strength
-        if strength > 0.85:  # Very strong hand
-            bet = min(int(pot_size * 0.75), max_raise)
-        elif strength > 0.70:  # Strong hand
-            bet = min(int(pot_size * 0.5), max_raise)
-        elif strength > 0.60:  # Good hand
-            bet = min(int(pot_size * 0.33), max_raise)
-        else:  # Weaker hand
-            bet = min_raise  # Minimum raise
-        
-        return max(bet, min_raise)  # Ensure we meet minimum raise requirements
-
-    def bet_ratio_preflop(self, strength):
-        if strength > .85: return .6
-        if strength > .7: return .45
-        if strength > .5: return .25
-        if strength > .4: return .15 
-        return 0
-
-    def bet_ratio_postflop(self, strength, community_cards):
-        result = self.evaluator.bet_size_helper(community_cards)
-        # Handle case where best hand strength equals player's strength
-        if result == 0:  # Avoid division by zero
-            return 0
-        ratio = strength / result
-        return ratio
-
-    def opp_estimate_preflop(self, opp_bet):
-        # If we have pattern data on an all-in player, adjust the estimated strength
-        if self.hand_count >= self.min_hands_for_pattern and self.all_in_count > 0:
-            all_in_frequency = self.all_in_count / self.hand_count
-            
-            # If opponent frequently goes all-in, assume they're bluffing more often
-            if all_in_frequency > 0.5 and opp_bet > 50:
-                return max(0.4, 0.8 - all_in_frequency * 0.6)  # Lower estimate for frequent all-in players
-        
-        # Default estimates
-        if opp_bet > 50: return .8
-        if opp_bet > 30: return .55
-        if opp_bet > 10: return .45
-        return 0
+            return True, 1
+        return True, 0
     
-    def opp_estimate_postflop(self, opp_bet):
-        # Similar adjustment for postflop
-        if self.hand_count >= self.min_hands_for_pattern and self.all_in_count > 0:
-            all_in_frequency = self.all_in_count / self.hand_count
-            
-            # Adjust postflop estimates based on all-in frequency
-            if all_in_frequency > 0.5 and opp_bet > 40:
-                return max(0.3, 0.7 - all_in_frequency * 0.5)
+    def should_call_all_in(self, hand_strength, is_premium, street, community_cards=[]):
+        """Simplified all-in calling decision"""
+        # Always call with premium hands
+        if is_premium:
+            self.logger.info(f"Calling all-in with premium hand")
+            return True
         
-        # Default estimates
-        if opp_bet > 50: return .7
-        if opp_bet > 40: return .6
-        if opp_bet > 30: return .5
-        if opp_bet > 20: return .3
-        if opp_bet > 10: return .2
-        return 0
-
+        # Get all-in frequency if we have data
+        all_in_frequency = 0
+        if self.hand_count >= self.min_hands_for_pattern:
+            all_in_frequency = self.all_in_count / self.hand_count
+        
+        # Calculate calling threshold
+        if street == 0:  # Preflop
+            # Base threshold, adjusted for all-in frequency
+            threshold = 0.5 - (all_in_frequency * 0.3)
+            
+            # More we've seen the opponent go all-in, the more we call
+            threshold = max(0.3, min(0.5, threshold))
+        else:  # Postflop
+            # Postflop thresholds are lower
+            threshold = 0.45 - (all_in_frequency * 0.3)
+            
+            # Very strong absolute hands always call
+            if hand_strength > 0.6:
+                self.logger.info(f"Calling all-in with strong postflop hand: {hand_strength:.2f}")
+                return True
+                
+            # If we have lots of all-in data, be more aggressive
+            if all_in_frequency > 0.4:
+                threshold = max(0.25, threshold - 0.1)
+        
+        # Log the threshold and decision
+        self.logger.info(f"All-in decision: strength={hand_strength:.2f}, threshold={threshold:.2f}, freq={all_in_frequency:.2f}")
+        
+        return hand_strength > threshold
+    
+    def bet_size_for_strength(self, hand_strength, max_raise, min_raise):
+        """Determine appropriate bet size based on hand strength"""
+        # Calculate pot-based sizing instead of max_raise-based
+        if hand_strength > 0.8:  # Very strong hand
+            return min(int(max_raise * 0.4), max_raise)
+        elif hand_strength > 0.7:  # Strong hand
+            return min(int(max_raise * 0.3), max_raise)
+        elif hand_strength > 0.6:  # Good hand
+            return min(int(max_raise * 0.2), max_raise)
+        elif hand_strength > 0.5:  # Decent hand
+            return min(int(max_raise * 0.15), max_raise)
+        elif hand_strength > 0.4:  # Marginal hand
+            return min(int(max_raise * 0.10), max_raise)
+        else:  # Weak hand
+            return min_raise
+    
+    def estimate_opponent_strength(self, opp_bet, street, community_cards=[]):
+        """Estimate opponent's hand strength based on their bet"""
+        # Calculate all-in frequency if we have data
+        all_in_frequency = 0
+        if self.hand_count >= self.min_hands_for_pattern:
+            all_in_frequency = self.all_in_count / self.hand_count
+        
+        # Preflop estimates
+        if street == 0:
+            if opp_bet > 50:
+                # Large preflop bets - assume strong unless we've seen all-ins
+                base_estimate = 0.65
+                if all_in_frequency > 0.3:
+                    # Reduce estimated strength for frequent all-in players
+                    return max(0.35, base_estimate - all_in_frequency * 0.6)
+                return base_estimate
+            elif opp_bet > 30:
+                return 0.5
+            elif opp_bet > 10:
+                return 0.4
+            return 0.3
+        
+        # Postflop estimates
+        else:
+            if opp_bet > 50:
+                # Large postflop bets - assume strong unless we've seen all-ins
+                base_estimate = 0.55
+                if all_in_frequency > 0.3:
+                    # Reduce estimated strength for frequent all-in players
+                    return max(0.25, base_estimate - all_in_frequency * 0.6)
+                return base_estimate
+            elif opp_bet > 40:
+                return 0.5
+            elif opp_bet > 30:
+                return 0.4
+            elif opp_bet > 20:
+                return 0.3
+            elif opp_bet > 10:
+                return 0.2
+            return 0.1
+    
     def act(self, observation, reward, terminated, truncated, info):        
-        # Extract relevant information from observation
+        # Extract observation data
         valid_actions = observation["valid_actions"]
         my_cards = observation["my_cards"]
         community_cards = [card for card in observation["community_cards"] if card != -1]
@@ -186,195 +218,162 @@ class PlayerAgent(Agent):
         max_raise = observation["max_raise"]
         min_raise = observation["min_raise"] if "min_raise" in observation else 1
         
-        # Check if opponent went all-in (for immediate reaction this hand)
+        # Reset discard flag on new hand
+        if street == 0 and my_bet == 0 and opp_bet <= 2:
+            self.has_discarded = False
+        
+        # Track opponent's bet
+        if opp_bet > 0:
+            self.opp_bets.append(opp_bet)
+            if len(self.opp_bets) > self.max_history_size:
+                self.opp_bets.pop(0)
+                
+        # Check for all-in
         is_opp_allin = (opp_bet == max_raise and opp_bet > 20)
         
-        # Discard logic (unchanged)
+        # Handle discards
         can_discard = valid_actions[action_types.DISCARD.value]
         if can_discard and not self.has_discarded:
             if street == 0:
                 should_discard, card_idx = self.should_redraw_preflop(my_cards)
             else:
                 should_discard, card_idx = self.should_redraw_postflop(my_cards, community_cards, street)
+            
             if should_discard:
                 self.has_discarded = True
                 return action_types.DISCARD.value, 0, card_idx
       
-        # Calculate current hand strength
+        # Calculate hand strength
+        is_premium = self.is_premium_hand(my_cards)
         if street == 0:  # Preflop
             hand_strength = self.evaluator.get_strength_preflop(my_cards)
         else:  # Postflop
             hand_strength, hand_ranking = self.evaluator.get_strength_postflop(my_cards, community_cards)
+            # Log hand details for debugging
+            hand_str = [int_to_card(c) for c in my_cards]
+            board_str = [int_to_card(c) for c in community_cards] if community_cards else "[]"
+            self.logger.info(f"Street: {street}, Hand: {hand_str}, Board: {board_str}, Strength: {hand_strength:.2f}")
         
-        # PREFLOP ACTIONS #
-        if street == 0:
-            is_premium = self.is_premium_hand(my_cards)
-            opp_strength = self.bet_ratio_preflop(self.opp_estimate_preflop(opp_bet))
-            our_strength = self.bet_ratio_preflop(hand_strength)
+        # Handle all-in situations first
+        if is_opp_allin:
+            if self.should_call_all_in(hand_strength, is_premium, street, community_cards):
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1
+            else:
+                if valid_actions[action_types.FOLD.value]:
+                    return action_types.FOLD.value, 0, -1
+        
+        # Estimate opponent's hand strength
+        opp_strength = self.estimate_opponent_strength(opp_bet, street, community_cards)
+        
+        # Decision making logic
+        if hand_strength > opp_strength + 0.1:  # We're significantly stronger
+            # Calculate appropriate bet size
+            # Consider pot size when calculating bet amount
+            pot_size = my_bet + opp_bet
+            bet_amount = self.bet_size_for_strength(hand_strength, max_raise, min_raise)
             
-            # Combined approach for all-in decisions
-            if is_opp_allin:
-                # Always call with premium hands
-                if is_premium:
-                    if valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
-                
-                # For non-premium hands, use pattern recognition if available
-                if self.hand_count >= self.min_hands_for_pattern:
-                    all_in_frequency = self.all_in_count / self.hand_count
-                    
-                    # If opponent goes all-in frequently, loosen our calling range
-                    if all_in_frequency > 0.5:
-                        # Adjust threshold based on frequency - higher frequency means lower threshold
-                        adjusted_threshold = max(0.45, 0.75 - all_in_frequency * 0.5)
+            # Limit raise to pot size for more reasonable bets
+            if pot_size > 0 and bet_amount > pot_size * 1.5:
+                bet_amount = min(int(pot_size * 1.5), bet_amount)
+            
+            # Raise if we have a good hand and can make a reasonable bet
+            # Adding additional check to avoid raising too frequently
+            if hand_strength > 0.45 and bet_amount > min_raise:
+                # Only raise with a certain probability based on hand strength
+                # This avoids being too predictable
+                should_raise = random.random() < (hand_strength - 0.3)  # More likely with stronger hands
+                if should_raise and valid_actions[action_types.RAISE.value]:
+                    # Ensure our bet isn't too large for the situation
+                    # Add a sanity check - don't bet more than 20% of max_raise unless very strong hand
+                    if hand_strength < 0.7 and bet_amount > max_raise * 0.2:
+                        bet_amount = int(max_raise * 0.2)
                         
-                        if hand_strength > adjusted_threshold:
-                            if valid_actions[action_types.CALL.value]:
-                                return action_types.CALL.value, 0, -1
+                    self.our_bets.append(bet_amount)
+                    if len(self.our_bets) > self.max_history_size:
+                        self.our_bets.pop(0)
+                    return action_types.RAISE.value, bet_amount, -1
             
-            # Rest of preflop logic (unchanged)
-            if our_strength > opp_strength:
-                tentative_raise = int(our_strength * max_raise * .8)
-                if min_raise < tentative_raise and tentative_raise < max_raise:
-                    if valid_actions[action_types.RAISE.value]:
-                        return action_types.RAISE.value, tentative_raise, -1
-                    elif valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
-                    elif valid_actions[action_types.CHECK.value]:
-                        return action_types.CHECK.value, 0, -1
-                    else:
-                        return action_types.FOLD.value, 0, -1
-                else:
-                    if valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
-                    elif valid_actions[action_types.CHECK.value]:
-                        return action_types.CHECK.value, 0, -1
-                    else:
-                        return action_types.FOLD.value, 0, -1 
-            elif abs(opp_strength - our_strength) <= .15:
-                if valid_actions[action_types.CALL.value]:
-                    return action_types.CALL.value, 0, -1
-                elif valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1  
-            elif opp_bet < 10:
-                if valid_actions[action_types.CALL.value]:
-                    return action_types.CALL.value, 0, -1
-                elif valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1 
-            else:
-                if valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1  
-
-        else: # POSTFLOP ACTIONS
-            opp_strength = self.bet_ratio_postflop(self.opp_estimate_postflop(opp_bet), community_cards)
-            our_strength = self.bet_ratio_postflop(hand_strength, community_cards)
-
-            # Similar pattern-based adjustment for postflop all-ins
-            if is_opp_allin:
-                # Base case: call if we have the stronger hand
-                if our_strength > opp_strength:
-                    if valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
+            # Call if we can't or shouldn't raise
+            if valid_actions[action_types.CALL.value]:
+                self.our_bets.append(opp_bet)
+                if len(self.our_bets) > self.max_history_size:
+                    self.our_bets.pop(0)
+                return action_types.CALL.value, 0, -1
                 
-                # Pattern-based adjustment for frequent all-in players
-                if self.hand_count >= self.min_hands_for_pattern:
-                    all_in_frequency = self.all_in_count / self.hand_count
-                    
-                    if all_in_frequency > 0.4:
-                        # More aggressive calling against all-in players
-                        if hand_strength > 0.5 or our_strength > 0.7:
-                            if valid_actions[action_types.CALL.value]:
-                                return action_types.CALL.value, 0, -1
-            
-            # Rest of postflop logic (unchanged)
-            if our_strength > opp_strength:
-                tentative_raise = int(our_strength * max_raise * .8)
-                if min_raise < tentative_raise and tentative_raise < max_raise:
-                    if valid_actions[action_types.RAISE.value]:
-                        return action_types.RAISE.value, tentative_raise, -1
-                    elif valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
-                    elif valid_actions[action_types.CHECK.value]:
-                        return action_types.CHECK.value, 0, -1
-                    else:
-                        return action_types.FOLD.value, 0, -1
-                else:
-                    if valid_actions[action_types.CALL.value]:
-                        return action_types.CALL.value, 0, -1
-                    elif valid_actions[action_types.CHECK.value]:
-                        return action_types.CHECK.value, 0, -1
-                    else:
-                        return action_types.FOLD.value, 0, -1 
-                    
-            elif abs(opp_strength - our_strength) <= .15:
+        elif abs(hand_strength - opp_strength) <= 0.1:  # We're close in strength
+            # Call if bet is reasonable or we have a decent hand
+            if opp_bet < 20 or hand_strength > 0.4:
                 if valid_actions[action_types.CALL.value]:
+                    self.our_bets.append(opp_bet)
+                    if len(self.our_bets) > self.max_history_size:
+                        self.our_bets.pop(0)
                     return action_types.CALL.value, 0, -1
-                elif valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1  
-            elif opp_bet < 10:
+                    
+        else:  # We're weaker
+            # Call small bets with almost any hand
+            if opp_bet < 10 and hand_strength > 0.3:
                 if valid_actions[action_types.CALL.value]:
+                    self.our_bets.append(opp_bet)
+                    if len(self.our_bets) > self.max_history_size:
+                        self.our_bets.pop(0)
                     return action_types.CALL.value, 0, -1
-                elif valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1 
-            else:
-                if valid_actions[action_types.CHECK.value]:
-                    return action_types.CHECK.value, 0, -1
-                else:
-                    return action_types.FOLD.value, 0, -1  
-
-        # Default actions if nothing else applies
+                    
+            # Only call larger bets with good hands
+            elif hand_strength > 0.5:
+                if valid_actions[action_types.CALL.value]:
+                    self.our_bets.append(opp_bet)
+                    if len(self.our_bets) > self.max_history_size:
+                        self.our_bets.pop(0)
+                    return action_types.CALL.value, 0, -1
+        
+        # Check if possible, otherwise fold
         if valid_actions[action_types.CHECK.value]:
             return action_types.CHECK.value, 0, -1
         else:
-            return action_types.FOLD.value, 0, -1  
+            return action_types.FOLD.value, 0, -1
                     
     def observe(self, observation, reward, terminated, truncated, info):
-        """Track game outcomes and opponent patterns by inferring from available data"""
+        """Track game outcomes and opponent patterns"""
         
-        # Track big bets and all-ins based on observed opp_bet
+        # Track opponent's betting pattern
         if "opp_bet" in observation and "max_raise" in observation:
             opp_bet = observation["opp_bet"]
             max_raise = observation["max_raise"]
             
-            # If bet is very large or all-in
-            if opp_bet > 20 and opp_bet > self.previous_opp_bet:
-                self.big_bet_count += 1
-                
-                # Check if it was an all-in or close to it
-                if opp_bet == max_raise:
+            # Track potential all-ins (large bets or actual all-ins)
+            if opp_bet > 15 and opp_bet > self.previous_opp_bet:
+                if opp_bet == max_raise or opp_bet > max_raise * 0.8:
                     self.all_in_count += 1
+                    self.logger.info(f"All-in behavior detected: {opp_bet} chips")
             
             # Store current bet for comparison next time
             self.previous_opp_bet = opp_bet
         
-        # Detect new hand
+        # Handle end of hand
         if terminated:
             self.hand_count += 1
-            self.previous_opp_bet = 0  # Reset for next hand
             
-            # Original hand history tracking
-            if abs(reward) > 20:  # Only log significant hand results
-                self.logger.info(f"Significant hand completed with reward: {reward}")
-                
-                # Update hand history for long-term strategy adaptation
-                self.hand_history.append({
-                    'reward': reward,
-                    'terminal_state': observation
-                })
-                
-                # Keep history manageable
-                if len(self.hand_history) > 50:
-                    self.hand_history.pop(0)
+            # Log opponent stats periodically
+            if self.hand_count % 5 == 0:
+                all_in_frequency = self.all_in_count / max(1, self.hand_count)
+                self.logger.info(f"Opponent stats after {self.hand_count} hands: all_in_freq={all_in_frequency:.2f}")
+            
+            # Reset for next hand
+            self.previous_opp_bet = 0
+            self.has_discarded = False
+            
+            # Update hand history
+            self.logger.info(f"Hand completed with reward: {reward}")
+            self.hand_history.append({
+                'reward': reward,
+                'terminal_state': observation,
+                'hand_number': self.hand_count
+            })
+            
+            # Keep history manageable
+            if len(self.hand_history) > 50:
+                self.hand_history.pop(0)
     
     def reset(self):
         """Reset the bot state for a new hand"""
