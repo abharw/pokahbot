@@ -20,17 +20,8 @@ class PlayerAgent(Agent):
         
         # Game state tracking
         self.hand_history = []
-        self.opponent_tendencies = {
-            'aggression': 0.5,  # Start with neutral assumption
-            'call_frequency': 0.5,
-            'fold_frequency': 0.3,
-        }
     
     def is_premium_hand(self, cards):
-        """
-        Determine if a hand is premium enough to call an all-in bet
-        Only the absolute strongest hands qualify
-        """
         # Extract ranks
         ranks = sorted([self.evaluator.get_rank(card) for card in cards])
         
@@ -54,11 +45,8 @@ class PlayerAgent(Agent):
         
         return False
     
-    def should_redraw(self, cards, street):
-        """
-        Determine if we should redraw a card
-        Strategy: Discard lower card unless we have a premium hand
-        """
+    def should_redraw_preflop(self, cards):
+
         # Don't redraw if we already have a premium hand
         if self.is_premium_hand(cards):
             return False, -1  # Don't redraw
@@ -77,115 +65,221 @@ class PlayerAgent(Agent):
         # Redraw lower card
         return True, 0 if ranks[0] < ranks[1] else 1
     
-    def log_game_state(self, observation):
-        """Log important game state information for debugging and analysis"""
-        if observation["street"] == 0:  # Preflop
-            self.logger.debug(f"Hole cards: {[int_to_card(c) for c in observation['my_cards']]}")
-        elif observation["community_cards"]:  # New community cards revealed
-            visible_cards = [c for c in observation["community_cards"] if c != -1]
-            if visible_cards:
-                street_names = ["Preflop", "Flop", "Turn", "River"]
-                self.logger.debug(f"{street_names[observation['street']]}: {[int_to_card(c) for c in visible_cards]}")
-    
-    def calculate_pot_odds(self, observation):
-        """Calculate pot odds based on current bet sizes"""
-        continue_cost = observation["opp_bet"] - observation["my_bet"]
-        pot_size = observation["my_bet"] + observation["opp_bet"]
-        pot_odds = continue_cost / (continue_cost + pot_size) if continue_cost > 0 else 0
-        return pot_odds
-    
-    def calculate_optimal_bet(self, equity, pot_size, max_raise):
-        """Calculate optimal bet size based on equity and pot size"""
-        if equity > 0.8:  # Very strong hand
+    def should_redraw_postflop(self, hand, community_cards, street):
+        
+        if(self.evaluator.has_pair(hand)):
+            return False, -1
+        
+        #first check for superior hands
+
+        all_cards = hand + community_cards
+
+        if(self.evaluator.get_strength_postflop(hand, community_cards)[1] > 3):
+            return False, -1
+        
+        for i in range(len(hand)):
+            for j in range(len(community_cards)):
+                if(self.evaluator.has_pair([hand[i], community_cards[j]])):
+                    if(i == 0):
+                        return True, 1
+                    return True, 0
+                
+        # check if close to a flush
+        suits = [self.evaluator.get_suit(card) for card in all_cards]
+        suit_counts = {}
+            
+        for suit in suits:
+            if suit in suit_counts:                
+                suit_counts[suit] += 1
+            else:
+                suit_counts[suit] = 1
+            
+        for (suit, count) in suit_counts.items():
+
+            if count == 4 and street < 3:
+                if(self.evaluator.get_suit(hand[0]) == suit):
+                    if(self.evaluator.get_suit(hand[1]) != suit):
+                        return True, 1
+                else:
+                    if(self.evaluator.get_suit(hand[1]) == 1):
+                        return True, 0
+                return False, -1
+        
+        if(self.evaluator.get_rank(hand[0]) > self.evaluator.get_rank(hand[1])):
+            return True, hand[1]
+        return True, hand[0]
+
+    def calculate_optimal_bet(self, strength, pot_size, max_raise, min_raise):
+        # Scale bet size based on hand strength
+        if strength > 0.85:  # Very strong hand
             bet = min(int(pot_size * 0.75), max_raise)
-        elif equity > 0.7:  # Strong hand
+        elif strength > 0.70:  # Strong hand
             bet = min(int(pot_size * 0.5), max_raise)
-        elif equity > 0.6:  # Good hand
+        elif strength > 0.60:  # Good hand
             bet = min(int(pot_size * 0.33), max_raise)
-        else:
-            bet = 0  # Don't raise with weaker hands
+        else:  # Weaker hand
+            bet = min_raise  # Minimum raise
         
-        return bet
+        return max(bet, min_raise)  # Ensure we meet minimum raise requirements
+
+    def bet_ratio_preflop(self, strength):
+        if(strength > .85): return .6
+        if(strength > .7): return .45
+        if(strength > .5): return .25
+        if(strength > .4): return .15 
+        return 0
+
+    def bet_ratio_postflop(self, strength, community_cards):
+        result = self.evaluator.bet_size_helper(community_cards)
+        ratio = strength / result
+        return ratio
+
+    def opp_estimate_preflop(self, opp_bet):
+        if opp_bet > 50: return .8
+        if opp_bet > 30: return .55
+        if opp_bet > 10: return .45
+        return 0
     
-    def act(self, observation, reward, terminated, truncated, info):
-        """
-        Determine the action to take based on the current observation
-        Returns a tuple of (action_type, raise_amount, card_to_discard)
-        """
-        # Log game state
-        self.log_game_state(observation)
-        
+    def opp_estimate_post_flop(self, opp_bet):
+        if opp_bet > 50: return .7
+        if opp_bet > 40: return .6
+        if opp_bet > 30: return .5
+        if opp_bet > 20: return .3
+        if opp_bet > 10: return .2
+        return 0
+
+    def act(self, observation, reward, terminated, truncated, info):        
         # Extract relevant information from observation
         valid_actions = observation["valid_actions"]
         my_cards = observation["my_cards"]
-        community_cards = observation["community_cards"]
-        community_cards = [card for card in community_cards if card != -1]
+        community_cards = [card for card in observation["community_cards"] if card != -1]
         street = observation["street"]
         opp_bet = observation["opp_bet"]
         my_bet = observation["my_bet"]
         max_raise = observation["max_raise"]
         min_raise = observation["min_raise"] if "min_raise" in observation else 1
-        opp_discarded_card = observation["opp_discarded_card"] if "opp_discarded_card" in observation else -1
-        opp_drawn_card = observation["opp_drawn_card"] if "opp_drawn_card" in observation else -1
         
-        # Prepare card lists
-        opp_discarded_cards = [opp_discarded_card] if opp_discarded_card != -1 else []
-        opp_drawn_cards = [opp_drawn_card] if opp_drawn_card != -1 else []
-        
-        # Calculate equity
-        equity = self.evaluator.calculate_equity(
-            my_cards, 
-            community_cards, 
-            opp_drawn_cards, 
-            opp_discarded_cards
-        )
-        
-        # Calculate pot odds
-        pot_odds = self.calculate_pot_odds(observation)
-        
-        # Log equity and pot odds for significant decisions
-        self.logger.debug(f"Equity: {equity:.2f}, Pot odds: {pot_odds:.2f}")
-        
+
         # Check if we can discard and should discard
         can_discard = valid_actions[action_types.DISCARD.value]
         
         if can_discard and not self.has_discarded:
-            should_discard, card_idx = self.should_redraw(my_cards, street)
+            if street == 0:
+                should_discard, card_idx = self.should_redraw_preflop(my_cards)
+            else:
+                should_discard, card_idx = self.should_redraw_postflop(my_cards, community_cards, street)
             if should_discard:
                 self.has_discarded = True
-                self.logger.debug(f"Discarding card {card_idx}: {int_to_card(my_cards[card_idx])}")
                 return action_types.DISCARD.value, 0, card_idx
+      
+        # Calculate current hand strength based on street
+        if street == 0:  # Preflop
+            hand_strength = self.evaluator.get_strength_preflop(my_cards)
+            # hand_ranking = 0  # Not relevant preflop
+        else:  # Postflop
+            hand_strength, hand_ranking = self.evaluator.get_strength_postflop(my_cards, community_cards)
         
-        # Decision making based on equity, pot odds, and game state
-        pot_size = my_bet + opp_bet
-        
-        # If we have very strong equity, consider raising
-        if valid_actions[action_types.RAISE.value] and equity > 0.7:
-            raise_amount = self.calculate_optimal_bet(equity, pot_size, max_raise)
-            if raise_amount >= min_raise:
-                if raise_amount > 20:  # Only log large raises
-                    self.logger.info(f"Large raise to {raise_amount} with equity {equity:.2f}")
-                return action_types.RAISE.value, raise_amount, -1
-        
-        # If our equity exceeds pot odds, call
-        if valid_actions[action_types.CALL.value] and equity >= pot_odds:
-            return action_types.CALL.value, 0, -1
-        
-        # Check when possible
+        # PREFLOP ACTIONS #
+        if street == 0:
+            is_premium = self.is_premium_hand(my_cards)
+            opp_strength = self.bet_ratio_preflop(self.opp_estimate_preflop(opp_bet))
+            our_strength = self.bet_ratio_preflop(hand_strength)
+            # calling ALL IN 
+            if opp_bet == max_raise and is_premium:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1 
+            # everything else
+            if our_strength > opp_strength:
+                tentative_raise = our_strength * max_raise * .8
+                if min_raise < tentative_raise and tentative_raise < max_raise:
+                    if valid_actions[action_types.RAISE.value]:
+                        return action_types.RAISE.value, tentative_raise, -1
+                    elif valid_actions[action_types.CALL.value]:
+                        return action_types.CALL.value, 0, -1
+                    elif valid_actions[action_types.CHECK.value]:
+                        return action_types.CHECK.value, 0, -1
+                    else:
+                        return action_types.FOLD.value, 0, -1
+                else:
+                    if valid_actions[action_types.CALL.value]:
+                        return action_types.CALL.value, 0, -1
+                    elif valid_actions[action_types.CHECK.value]:
+                        return action_types.CHECK.value, 0, -1
+                    else:
+                        return action_types.FOLD.value, 0, -1 
+            elif abs(opp_strength - our_strength) <= .15:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1
+                elif valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1  
+            elif opp_bet < 10:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1
+                elif valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1 
+            else:
+                if valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1  
+
+        else: #POST FLOP
+            opp_strength = self.bet_ratio_postflop(self.opp_estimate_postflop(opp_bet))
+            our_strength = self.bet_ratio_postflop(hand_strength)
+
+            if opp_bet == max_raise and our_strength > opp_strength:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1 
+            # everything else
+            if our_strength > opp_strength:
+                tentative_raise = our_strength * max_raise * .8
+                if min_raise < tentative_raise and tentative_raise < max_raise:
+                    if valid_actions[action_types.RAISE.value]:
+                        return action_types.RAISE.value, tentative_raise, -1
+                    elif valid_actions[action_types.CALL.value]:
+                        return action_types.CALL.value, 0, -1
+                    elif valid_actions[action_types.CHECK.value]:
+                        return action_types.CHECK.value, 0, -1
+                    else:
+                        return action_types.FOLD.value, 0, -1
+                else:
+                    if valid_actions[action_types.CALL.value]:
+                        return action_types.CALL.value, 0, -1
+                    elif valid_actions[action_types.CHECK.value]:
+                        return action_types.CHECK.value, 0, -1
+                    else:
+                        return action_types.FOLD.value, 0, -1 
+                    
+            elif abs(opp_strength - our_strength) <= .15:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1
+                elif valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1  
+            elif opp_bet < 10:
+                if valid_actions[action_types.CALL.value]:
+                    return action_types.CALL.value, 0, -1
+                elif valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1 
+            else:
+                if valid_actions[action_types.CHECK.value]:
+                    return action_types.CHECK.value, 0, -1
+                else:
+                    return action_types.FOLD.value, 0, -1  
+
         if valid_actions[action_types.CHECK.value]:
             return action_types.CHECK.value, 0, -1
-        
-        # Fold as last resort
-        if valid_actions[action_types.FOLD.value]:
-            if opp_bet > 20:  # Only log significant folds
-                self.logger.info(f"Folding to large bet of {opp_bet}")
-            return action_types.FOLD.value, 0, -1
-        
-        # If we reach here, something unexpected happened
-        # Just take the first valid action
-        for i, is_valid in enumerate(valid_actions):
-            if is_valid:
-                return i, 0, -1
+        else:
+            return action_types.FOLD.value, 0, -1  
+
+                    
     
     def observe(self, observation, reward, terminated, truncated, info):
         """Track game outcomes to adjust strategy"""
