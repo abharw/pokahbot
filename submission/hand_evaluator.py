@@ -63,14 +63,7 @@ class HandEvaluator:
             if pair_rank == 8:
                 return 0.95  # AA
             # High pairs (99, 88, 77)
-            elif pair_rank >= 5:
-                return 0.85 + (pair_rank - 5) * 0.03  # 99=0.91, 88=0.88, 77=0.85
-            # Medium pairs
-            elif pair_rank >= 3:
-                return 0.65 + (pair_rank - 3) * 0.05  # 66=0.75, 55=0.70, 44=0.65
-            # Low pairs
-            else:
-                return 0.50 + pair_rank * 0.05  # 33=0.60, 22=0.55
+            else: return 0.95 + ((pair_rank - 8) * 0.04)
         
         # Check for suited cards
         is_suited = self.is_suited(cards)
@@ -83,24 +76,24 @@ class HandEvaluator:
         if high_card == 8:  # Ace
             # A9+
             if second_card >= 7:
-                return 0.65 + 0.10 * is_suited  # A9=0.65, A9s=0.75
+                return 0.55 + 0.10 * is_suited  # A9=0.65, A9s=0.75
             # A7-A8
             elif second_card >= 5:
-                return 0.55 + 0.15 * is_suited  # A7=0.55, A7s=0.70
+                return 0.5 + 0.10 * is_suited  # A7=0.55, A7s=0.70
             # A2-A6
             else:
-                return 0.40 + 0.15 * is_suited  # A2=0.40, A2s=0.55
+                return 0.42 + 0.1 * is_suited  # A2=0.40, A2s=0.55
         
         # High connected cards (89, 78, etc.)
         if abs(high_card - second_card) == 1 and high_card >= 6:
-            return 0.35 + 0.15 * is_suited  # 89=0.35, 89s=0.50
+            return 0.32 + 0.08 * is_suited  # 89=0.35, 89s=0.50
         
         # Other high cards
         if high_card >= 6:
-            return 0.30 + 0.10 * is_suited
+            return 0.3 + 0.05 * is_suited
         
         # Low cards
-        return 0.20 + 0.10 * is_suited
+        return 0.20 + 0.05 * is_suited
     
     def get_strength_postflop(self, player_cards, community_cards):
     
@@ -127,29 +120,8 @@ class HandEvaluator:
                 suit_count[suit] += 1
             else:
                 suit_count[suit] = 1
-
-        # For the 27-card deck: check for straights including Ace-low
-        def has_straight_in_ranks(ranks):
-            # Sort unique ranks
-            unique_ranks = sorted(set(ranks))
-            
-            # Check for regular straights (5 consecutive cards)
-            for i in range(len(unique_ranks) - 4):
-                if unique_ranks[i+4] - unique_ranks[i] == 4:
-                    return True, unique_ranks[i+4]  # Return high card of straight
-            
-            # Check for Ace-low straight (A,2,3,4,5)
-            if 0 in unique_ranks and 1 in unique_ranks and 2 in unique_ranks and 3 in unique_ranks and 8 in unique_ranks:
-                return True, 3  # 5 is the high card (rank 3)
-                
-            # Check for Ace-high straight (6,7,8,9,A) - only in this modified deck
-            if 4 in unique_ranks and 5 in unique_ranks and 6 in unique_ranks and 7 in unique_ranks and 8 in unique_ranks:
-                return True, 8  # Ace is the high card (rank 8)
-                
-            return False, -1
-        
         # Check for straight
-        has_straight, straight_high = has_straight_in_ranks(all_ranks)
+        has_straight, straight_high = self.has_straight_in_ranks(all_ranks)
         
         # Check for flush
         flush_suit = -1
@@ -168,7 +140,7 @@ class HandEvaluator:
         # Check for straight flush
         straight_flush_high = -1
         if has_flush and len(flush_ranks) >= 5:
-            has_sf, straight_flush_high = has_straight_in_ranks(flush_ranks)
+            has_sf, straight_flush_high = self.has_straight_in_ranks(flush_ranks)
             if has_sf:
                 return (0.99, self.HAND_RANKINGS["STRAIGHT_FLUSH"])  # Straight flush is the best hand
         
@@ -251,7 +223,28 @@ class HandEvaluator:
         high_card_value = 0.10 + (sorted_ranks[0] / 8) * 0.14  # 0.10-0.24
         
         return (high_card_value, self.HAND_RANKINGS["HIGH_CARD"])
-    
+
+        # For the 27-card deck: check for straights including Ace-low
+   
+    def has_straight_in_ranks(self, ranks):
+        # Sort unique ranks
+        unique_ranks = sorted(set(ranks))
+        
+        # Check for regular straights (5 consecutive cards)
+        for i in range(len(unique_ranks) - 4):
+            if unique_ranks[i+4] - unique_ranks[i] == 4:
+                return True, unique_ranks[i+4]  # Return high card of straight
+        
+        # Check for Ace-low straight (A,2,3,4,5)
+        if 0 in unique_ranks and 1 in unique_ranks and 2 in unique_ranks and 3 in unique_ranks and 8 in unique_ranks:
+            return True, 3  # 5 is the high card (rank 3)
+            
+        # Check for Ace-high straight (6,7,8,9,A) - only in this modified deck
+        if 4 in unique_ranks and 5 in unique_ranks and 6 in unique_ranks and 7 in unique_ranks and 8 in unique_ranks:
+            return True, 8  # Ace is the high card (rank 8)
+            
+        return False, -1
+        
     def card_notation_to_int(self, card_str):
 
         # Convert rank
@@ -535,3 +528,6 @@ class HandEvaluator:
         
         return best_hand_strength
     
+if __name__ == "__main__":
+    eval = HandEvaluator()
+    print(eval.get_rank_value(eval.get_rank(26)))
